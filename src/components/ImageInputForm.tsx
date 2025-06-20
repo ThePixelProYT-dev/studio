@@ -7,19 +7,35 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { UploadCloud, Camera, Loader2, Wand2, Aperture, XCircle, CameraOff } from 'lucide-react';
+import { UploadCloud, Camera, Loader2, Wand2, Aperture, XCircle, CameraOff, Languages } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ImageInputFormProps {
-  onPoemGenerate: (imageDataUri: string) => void;
+  onPoemGenerate: (imageDataUri: string, language: string) => void;
   isLoading: boolean;
 }
 
+const languageOptions = [
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Español (Spanish)' },
+  { value: 'fr', label: 'Français (French)' },
+  { value: 'de', label: 'Deutsch (German)' },
+  { value: 'ja', label: '日本語 (Japanese)' },
+  { value: 'it', label: 'Italiano (Italian)' },
+];
+
 export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInputFormProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null); // Keep track of the file for potential future use
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { toast } = useToast();
@@ -28,6 +44,7 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,13 +72,13 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-      setShowCameraView(false); // Ensure camera view is closed
+      setShowCameraView(false); 
     }
   };
 
   const handleGenerateClick = () => {
     if (imagePreview) {
-      onPoemGenerate(imagePreview);
+      onPoemGenerate(imagePreview, selectedLanguage);
     } else {
       toast({
         title: 'No Image Selected',
@@ -74,7 +91,6 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
   const handleToggleCameraView = () => {
     if (!showCameraView) {
       setShowCameraView(true);
-      // Permission request will be handled by useEffect
     } else {
       setShowCameraView(false);
       setHasCameraPermission(null);
@@ -88,7 +104,7 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
 
     const startCamera = async () => {
       if (videoElement) {
-        setHasCameraPermission(null); // Reset while trying
+        setHasCameraPermission(null); 
         setCameraError(null);
         try {
           stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -103,7 +119,6 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
           };
         } catch (error: any) {
           console.error('Error accessing camera:', error);
-          const permissionError = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError' || error.name === 'NotFoundError';
           const userDenied = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError';
           
           let errorMsg = 'Could not access the camera.';
@@ -120,7 +135,7 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
             title: 'Camera Access Error',
             description: errorMsg,
           });
-          setShowCameraView(false); // Hide camera view on critical error
+          setShowCameraView(false);
         }
       }
     };
@@ -129,7 +144,7 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
       startCamera();
     }
 
-    return () => { // Cleanup function
+    return () => { 
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -152,9 +167,9 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
         ctx.drawImage(videoNode, 0, 0, canvas.width, canvas.height);
         const dataUri = canvas.toDataURL('image/png');
         setImagePreview(dataUri);
-        setImageFile(null); // Clear file if one was previously selected
-        setShowCameraView(false); // Switch back to preview/upload view
-        setHasCameraPermission(null); // Reset camera permission status
+        setImageFile(null); 
+        setShowCameraView(false); 
+        setHasCameraPermission(null); 
         setCameraError(null);
       } else {
          toast({title: 'Capture Error', description: 'Could not process image.', variant: 'destructive'});
@@ -249,6 +264,21 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
               <Camera className="mr-2 h-5 w-5" />
               Take Photo
             </Button>
+             <div className="space-y-2">
+              <Label htmlFor="language-select" className="text-base flex items-center">
+                <Languages className="mr-2 h-5 w-5 text-muted-foreground" /> Select Poem Language
+              </Label>
+              <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                <SelectTrigger id="language-select" className="w-full">
+                  <SelectValue placeholder="Select language" />
+                </SelectTrigger>
+                <SelectContent>
+                  {languageOptions.map(lang => (
+                    <SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </>
         )}
       </CardContent>
@@ -270,5 +300,3 @@ export default function ImageInputForm({ onPoemGenerate, isLoading }: ImageInput
     </Card>
   );
 }
-
-    

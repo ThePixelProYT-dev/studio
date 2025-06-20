@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview AI agent that generates poems from images.
@@ -16,6 +17,7 @@ const GeneratePoemFromImageInputSchema = z.object({
     .describe(
       "A photo, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
+  language: z.string().optional().describe('The target language for the poem (e.g., "en", "es", "fr"). Defaults to English if not provided.'),
 });
 export type GeneratePoemFromImageInput = z.infer<typeof GeneratePoemFromImageInputSchema>;
 
@@ -36,8 +38,24 @@ const prompt = ai.definePrompt({
 
   Write a poem inspired by the following image. The poem should evoke the emotions and themes present in the image.
   The poem should be short, no more than 10 lines.
+  {{#if language}}Generate the poem in {{language_name language}}.{{else}}Generate the poem in English.{{/if}}
 
   Image: {{media url=imageDataUri}}`,
+  handlebars: {
+    helpers: {
+      language_name: (langCode: string) => {
+        const languages: Record<string, string> = {
+          en: 'English',
+          es: 'Spanish',
+          fr: 'French',
+          de: 'German',
+          ja: 'Japanese',
+          it: 'Italian',
+        };
+        return languages[langCode] || langCode;
+      }
+    }
+  }
 });
 
 const generatePoemFromImageFlow = ai.defineFlow(

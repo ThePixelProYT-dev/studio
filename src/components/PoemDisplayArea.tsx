@@ -4,7 +4,7 @@
 import Image from 'next/image';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Heart, DownloadCloud } from 'lucide-react';
+import { Heart, DownloadCloud, Palette, TextCursorInput, Type, Baseline } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CollectionItem } from '@/lib/types';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 
 type PoemPosition = 'bottom-left' | 'bottom-center' | 'bottom-right' | 'top-left' | 'top-center' | 'top-right' | 'center';
 
@@ -36,41 +38,73 @@ interface PoemDisplayAreaProps {
 }
 
 const poemPositionOptions: { value: PoemPosition; label: string }[] = [
-  { value: 'bottom-left', label: 'Bottom Left' },
-  { value: 'bottom-center', label: 'Bottom Center' },
-  { value: 'bottom-right', label: 'Bottom Right' },
-  { value: 'top-left', label: 'Top Left' },
-  { value: 'top-center', label: 'Top Center' },
-  { value: 'top-right', label: 'Top Right' },
+  { value: 'bottom-left', label: 'Bottom Left' }, { value: 'bottom-center', label: 'Bottom Center' }, { value: 'bottom-right', label: 'Bottom Right' },
+  { value: 'top-left', label: 'Top Left' }, { value: 'top-center', label: 'Top Center' }, { value: 'top-right', label: 'Top Right' },
   { value: 'center', label: 'Center' },
 ];
 
+const fontFamilies = [
+  { value: "'Literata', serif", label: "Literata (Default)" },
+  { value: "'Arial', sans-serif", label: "Arial" },
+  { value: "'Times New Roman', serif", label: "Times New Roman" },
+  { value: "'Courier New', monospace", label: "Courier New" },
+  { value: "'Georgia', serif", label: "Georgia" },
+  { value: "'Verdana', sans-serif", label: "Verdana" },
+];
+
+// Helper to convert hex and opacity to rgba
+const hexToRgba = (hex: string, opacity: number): string => {
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 4) { // #RGB
+    r = parseInt(hex[1] + hex[1], 16);
+    g = parseInt(hex[2] + hex[2], 16);
+    b = parseInt(hex[3] + hex[3], 16);
+  } else if (hex.length === 7) { // #RRGGBB
+    r = parseInt(hex.slice(1, 3), 16);
+    g = parseInt(hex.slice(3, 5), 16);
+    b = parseInt(hex.slice(5, 7), 16);
+  }
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
 export default function PoemDisplayArea({ item, onSaveToCollection, isPoemReady }: PoemDisplayAreaProps) {
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
-  const [selectedPoemPosition, setSelectedPoemPosition] = useState<PoemPosition>('bottom-left');
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Customization State
+  const [selectedPoemPosition, setSelectedPoemPosition] = useState<PoemPosition>('bottom-left');
+  const [textColor, setTextColor] = useState<string>('#FFFFFF');
+  const [textBgColorHex, setTextBgColorHex] = useState<string>('#000000');
+  const [textBgOpacity, setTextBgOpacity] = useState<number>(0.7);
+  const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1); // 1 = default, slider 0.5 to 2
+  const [fontFamily, setFontFamily] = useState<string>("'Literata', serif");
 
   const drawImageWithPoemOnCanvas = useCallback((
     canvas: HTMLCanvasElement,
     baseImageUri: string,
     poemText: string,
-    positionKey: PoemPosition
+    options: {
+      position: PoemPosition;
+      textColor: string;
+      bgColor: string; // This should be an RGBA string
+      fontMultiplier: number;
+      fontFamily: string;
+    }
   ) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const img = new window.Image();
-    img.crossOrigin = 'anonymous'; // Important for tainted canvas if image is from different origin / data URI
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       const aspectRatio = img.naturalWidth / img.naturalHeight;
-      let drawWidth = canvas.parentElement?.clientWidth || img.naturalWidth; // Use parent for preview sizing
-      if (canvas.id === 'download-canvas-internal') drawWidth = img.naturalWidth; // Full res for download
+      let drawWidth = canvas.parentElement?.clientWidth || img.naturalWidth; 
+      if (canvas.id === 'download-canvas-internal') drawWidth = img.naturalWidth; 
 
       let drawHeight = drawWidth / aspectRatio;
 
-      // Cap preview canvas size for performance if parent is too large
       if (canvas.id !== 'download-canvas-internal') {
-        const maxPreviewHeight = (window.innerHeight * 0.5); 
+        const maxPreviewHeight = (window.innerHeight * 0.4); // Adjusted for more space for controls
         if (drawHeight > maxPreviewHeight) {
             drawHeight = maxPreviewHeight;
             drawWidth = drawHeight * aspectRatio;
@@ -83,16 +117,16 @@ export default function PoemDisplayArea({ item, onSaveToCollection, isPoemReady 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      const scaleFactor = canvas.width / img.naturalWidth; // Scale factor for font and padding based on drawn image size vs original
-      const baseFontSize = Math.max(12, Math.min(img.naturalWidth / 35, img.naturalHeight / 28)); // Font size based on original image
-      const fontSize = baseFontSize * scaleFactor;
+      const scaleFactor = canvas.width / img.naturalWidth; 
+      const baseFontSizeCalc = Math.max(10, Math.min(img.naturalWidth / 40, img.naturalHeight / 30)); // Slightly smaller base
+      const fontSize = (baseFontSizeCalc * options.fontMultiplier) * scaleFactor;
 
-      ctx.font = `bold ${fontSize}px 'Literata', serif`;
+      ctx.font = `bold ${fontSize}px ${options.fontFamily}`;
       const lineHeight = fontSize * 1.3;
       const edgePadding = fontSize; 
       const textBgPadding = fontSize * 0.3;
 
-      const originalLines = poemText.split('\\n');
+      const originalLines = poemText.split('\n'); // Use '\n' for actual newlines
       const wrappedLines: { text: string; width: number }[] = [];
       let textBlockContentWidth = 0;
       
@@ -125,49 +159,50 @@ export default function PoemDisplayArea({ item, onSaveToCollection, isPoemReady 
         }
       });
 
-      if (wrappedLines.length === 0) return; // No poem to draw
+      if (wrappedLines.length === 0) return; 
 
       const textBlockVisibleWidth = textBlockContentWidth + 2 * textBgPadding;
       const textBlockHeight = (wrappedLines.length * lineHeight) + (2 * textBgPadding) - (lineHeight - fontSize);
 
-
       let blockX: number; 
       let blockY: number; 
 
-      if (positionKey.includes('left')) {
+      if (options.position.includes('left')) {
         blockX = edgePadding;
-      } else if (positionKey.includes('center') && !positionKey.includes('left') && !positionKey.includes('right')) { // e.g. top-center, bottom-center, center
+      } else if (options.position.includes('center') && !options.position.includes('left') && !options.position.includes('right')) { 
         blockX = (canvas.width - textBlockVisibleWidth) / 2;
-      } else { // right
+      } else { 
         blockX = canvas.width - textBlockVisibleWidth - edgePadding;
       }
 
-      if (positionKey.startsWith('top')) {
+      if (options.position.startsWith('top')) {
         blockY = edgePadding;
-      } else if (positionKey.startsWith('bottom')) {
+      } else if (options.position.startsWith('bottom')) {
         blockY = canvas.height - textBlockHeight - edgePadding;
-      } else { // center (middle for 'center' key)
+      } else { 
         blockY = (canvas.height - textBlockHeight) / 2;
       }
       
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillStyle = options.bgColor; // Use the combined RGBA color
       ctx.fillRect(blockX, blockY, textBlockVisibleWidth, textBlockHeight);
 
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle = options.textColor;
       ctx.textBaseline = 'top'; 
       
       wrappedLines.forEach((line, index) => {
         const textY = blockY + textBgPadding + index * lineHeight;
         let textX = blockX + textBgPadding;
-
-        if ((positionKey.includes('center') && !positionKey.includes('left') && !positionKey.includes('right')) || positionKey === 'center') {
-          ctx.textAlign = 'center';
-          textX = blockX + textBlockVisibleWidth / 2;
-        } else if (positionKey.includes('right')) {
-          ctx.textAlign = 'right';
-          textX = blockX + textBlockVisibleWidth - textBgPadding;
-        } else { 
-          ctx.textAlign = 'left';
+        
+        // Align text within its own background box
+        const currentLineWidth = line.width;
+        if ((options.position.includes('center') && !options.position.includes('left') && !options.position.includes('right')) || options.position === 'center') {
+           ctx.textAlign = 'center';
+           textX = blockX + textBlockVisibleWidth / 2;
+        } else if (options.position.includes('right')) {
+           ctx.textAlign = 'right';
+           textX = blockX + textBlockVisibleWidth - textBgPadding;
+        } else { // left
+           ctx.textAlign = 'left';
         }
         ctx.fillText(line.text, textX, textY);
       });
@@ -177,24 +212,35 @@ export default function PoemDisplayArea({ item, onSaveToCollection, isPoemReady 
 
   useEffect(() => {
     if (isDownloadDialogOpen && previewCanvasRef.current && item.imageDataUri && item.poem) {
-      drawImageWithPoemOnCanvas(previewCanvasRef.current, item.imageDataUri, item.poem, selectedPoemPosition);
+      const currentBgColor = hexToRgba(textBgColorHex, textBgOpacity);
+      drawImageWithPoemOnCanvas(previewCanvasRef.current, item.imageDataUri, item.poem, {
+        position: selectedPoemPosition,
+        textColor,
+        bgColor: currentBgColor,
+        fontMultiplier: fontSizeMultiplier,
+        fontFamily,
+      });
     }
-  }, [isDownloadDialogOpen, item.imageDataUri, item.poem, selectedPoemPosition, drawImageWithPoemOnCanvas]);
+  }, [isDownloadDialogOpen, item.imageDataUri, item.poem, selectedPoemPosition, textColor, textBgColorHex, textBgOpacity, fontSizeMultiplier, fontFamily, drawImageWithPoemOnCanvas]);
 
 
   const handleActualDownload = () => {
     const hiddenCanvas = document.createElement('canvas');
-    hiddenCanvas.id = 'download-canvas-internal'; // To ensure full resolution drawing
-    drawImageWithPoemOnCanvas(hiddenCanvas, item.imageDataUri, item.poem, selectedPoemPosition);
+    hiddenCanvas.id = 'download-canvas-internal'; 
+    const currentBgColor = hexToRgba(textBgColorHex, textBgOpacity);
     
-    // Wait for image to load and draw on canvas
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => { // Ensure drawing is complete
-        // Re-draw on hidden canvas one more time to be sure its state is final
-        drawImageWithPoemOnCanvas(hiddenCanvas, item.imageDataUri, item.poem, selectedPoemPosition);
-        // Delay download slightly to ensure canvas is updated.
-        setTimeout(() => {
+    img.onload = () => { 
+        // Ensure drawing is based on final image dimensions and current settings
+        drawImageWithPoemOnCanvas(hiddenCanvas, item.imageDataUri, item.poem, {
+          position: selectedPoemPosition,
+          textColor,
+          bgColor: currentBgColor,
+          fontMultiplier: fontSizeMultiplier,
+          fontFamily,
+        });
+        setTimeout(() => { // Ensure canvas is fully rendered
             const dataUrl = hiddenCanvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = dataUrl;
@@ -204,11 +250,10 @@ export default function PoemDisplayArea({ item, onSaveToCollection, isPoemReady 
             link.click();
             document.body.removeChild(link);
             setIsDownloadDialogOpen(false);
-        }, 300); // 300ms delay, adjust if needed
+        }, 300); 
     };
-    img.src = item.imageDataUri; // Trigger load
+    img.src = item.imageDataUri; 
   };
-
 
   if (!item.imageDataUri || !item.poem) {
     return null;
@@ -239,44 +284,61 @@ export default function PoemDisplayArea({ item, onSaveToCollection, isPoemReady 
                 Download with Poem
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent className="sm:max-w-3xl"> {/* Increased width for more controls */}
               <DialogHeader>
-                <DialogTitle>Download Image with Poem</DialogTitle>
+                <DialogTitle>Customize & Download Image</DialogTitle>
                 <DialogDescription>
-                  Choose where you'd like the poem to appear on your image. The preview will update below.
+                  Adjust poem appearance. The preview updates live.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="poem-position" className="text-right col-span-1">
-                    Position
-                  </Label>
-                  <Select
-                    value={selectedPoemPosition}
-                    onValueChange={(value) => setSelectedPoemPosition(value as PoemPosition)}
-                  >
-                    <SelectTrigger id="poem-position" className="col-span-3">
-                      <SelectValue placeholder="Select poem position" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {poemPositionOptions.map(opt => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="grid md:grid-cols-2 gap-6 py-4">
+                {/* Left Column: Preview */}
                 <div className="w-full aspect-video border bg-muted rounded-md overflow-hidden relative flex items-center justify-center">
-                  {/* Canvas for previewing the image with poem */}
                   <canvas ref={previewCanvasRef} className="max-w-full max-h-[50vh] object-contain"></canvas>
+                </div>
+                {/* Right Column: Controls */}
+                <div className="space-y-4 overflow-y-auto max-h-[60vh] pr-2">
+                  <div>
+                    <Label htmlFor="poem-position" className="flex items-center mb-1"><Baseline className="mr-2 h-4 w-4 text-muted-foreground"/>Position</Label>
+                    <Select value={selectedPoemPosition} onValueChange={(v) => setSelectedPoemPosition(v as PoemPosition)}>
+                      <SelectTrigger id="poem-position"><SelectValue /></SelectTrigger>
+                      <SelectContent>{poemPositionOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="text-color" className="flex items-center mb-1"><Palette className="mr-2 h-4 w-4 text-muted-foreground"/>Text Color</Label>
+                      <Input id="text-color" type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="p-1 h-10"/>
+                    </div>
+                    <div>
+                      <Label htmlFor="font-family" className="flex items-center mb-1"><TextCursorInput className="mr-2 h-4 w-4 text-muted-foreground"/>Font Family</Label>
+                      <Select value={fontFamily} onValueChange={setFontFamily}>
+                        <SelectTrigger id="font-family"><SelectValue /></SelectTrigger>
+                        <SelectContent>{fontFamilies.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="bg-color" className="flex items-center mb-1"><Palette className="mr-2 h-4 w-4 text-muted-foreground"/>Background Color</Label>
+                    <Input id="bg-color" type="color" value={textBgColorHex} onChange={(e) => setTextBgColorHex(e.target.value)} className="p-1 h-10"/>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="bg-opacity" className="flex items-center mb-1">Background Opacity: {Math.round(textBgOpacity * 100)}%</Label>
+                    <Slider id="bg-opacity" min={0} max={1} step={0.05} value={[textBgOpacity]} onValueChange={(v) => setTextBgOpacity(v[0])} />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="font-size" className="flex items-center mb-1"><Type className="mr-2 h-4 w-4 text-muted-foreground"/>Font Size Multiplier: {fontSizeMultiplier.toFixed(1)}x</Label>
+                    <Slider id="font-size" min={0.5} max={2} step={0.1} value={[fontSizeMultiplier]} onValueChange={(v) => setFontSizeMultiplier(v[0])} />
+                  </div>
                 </div>
               </div>
               <DialogFooter>
-                <DialogClose asChild>
-                   <Button variant="outline">Cancel</Button>
-                </DialogClose>
-                <Button onClick={handleActualDownload}>
-                  <DownloadCloud className="mr-2 h-4 w-4" /> Download Now
-                </Button>
+                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                <Button onClick={handleActualDownload}><DownloadCloud className="mr-2 h-4 w-4" /> Download Now</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -289,5 +351,3 @@ export default function PoemDisplayArea({ item, onSaveToCollection, isPoemReady 
     </>
   );
 }
-
-    

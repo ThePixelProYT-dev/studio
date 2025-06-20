@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -17,14 +18,14 @@ export default function HomePage() {
   const [isPoemReady, setIsPoemReady] = useState(false);
   const { toast } = useToast();
 
-  const handlePoemGenerate = async (imageDataUri: string) => {
+  const handlePoemGenerate = async (imageDataUri: string, language: string) => {
     setIsLoading(true);
     setError(null);
     setCurrentPoemItem(null);
     setIsPoemReady(false);
 
     try {
-      const result = await generatePoemFromImage({ imageDataUri });
+      const result = await generatePoemFromImage({ imageDataUri, language });
       setCurrentPoemItem({ imageDataUri, poem: result.poem });
       // Delay making poem visible to allow animation to be noticeable
       setTimeout(() => setIsPoemReady(true), 100);
